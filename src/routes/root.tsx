@@ -13,11 +13,14 @@ import sadIcon from '../assets/face-sad.svg';
 import neutralIcon from '../assets/face-neutral.svg';
 
 import themeProvider from '../utils/themeProvider';
+import {convertToHoursMinutesSeconds, compareTimes, averageTime} from '../utils/utilityFunctions';
 
 interface Car {
     position: string;
     index: number;
     dwell_time: string;
+    in_time: number;
+    out_time: number;
 }
 
 function Root() {
@@ -25,6 +28,29 @@ function Root() {
     const [carsInLane, setCarsInLane] = useState<Car[]>([]);
     const [popCount, setPopCount] = useState<number>(0);
     const [sqlCount, setSqlCount] = useState<number>(0);
+
+    const [nextToOrder, setNextToOrder] = useState<number | null>(null)
+    const [currentlyOrdering, setCurrentlyOrdering] = useState<number | null>(null)
+    const [nextServing, setNextServing] = useState<number | null>(null)
+    const [currentlyServing, setCurrentlyServing] = useState<number | null>(null)
+
+    const [nto_time, set_nto_time] = useState<string>('00:00:00')
+    const [co_time, set_co_time] = useState<string>('00:00:00')
+    const [ns_time, set_ns_time] = useState<string>('00:00:00')
+    const [cs_time, set_cs_time] = useState<string>('00:00:00')
+
+    let nextToOderIntervalId: NodeJS.Timeout | null = null;
+    let co_interval_id: NodeJS.Timeout | null = null;
+    let ns_interval_id: NodeJS.Timeout | null = null;
+    let cs_interval_id: NodeJS.Timeout | null = null;
+
+    const [cs_minimum, set_cs_minimum] = useState<string>('0s');
+    const [cs_average, set_cs_average] = useState<string>('0s');
+    const [cs_maximum, set_cs_maximum] = useState<string>('0s');
+
+    const [co_minimum, set_co_minimum] = useState<string>('0s');
+    const [co_average, set_co_average] = useState<string>('0s');
+    const [co_maximum, set_co_maximum] = useState<string>('0s');
 
     useEffect(() => { // set score board time
         const interval = setInterval(() => {
@@ -39,6 +65,132 @@ function Root() {
         setSqlCount(carQueue.filter((d: any) => d.position === 'Service Queue Lane').length)
         return carQueue
     }
+
+    useEffect(() => {
+        setNextToOrder(carsInLane.filter(car => car.position === 'Pre-Order Point')[0]?.in_time)
+
+        if (carsInLane.filter(car => car.position === 'Order Point')[0]?.in_time !== currentlyOrdering) {
+            console.log('TRIGGERD')
+            setCurrentlyOrdering(carsInLane.filter(car => car.position === 'Order Point')[0]?.in_time)
+        }
+
+        setNextServing(carsInLane.filter(car => car.position === 'Service Queue Lane')[0]?.in_time)
+        setCurrentlyServing(carsInLane.filter(car => car.position === 'Pull Up Window')[0]?.in_time)
+    }, [carsInLane])
+    
+    const getTimeString = (timestamp: number) => {
+        const now = moment();
+        const duration = moment.duration(now.diff(timestamp));
+        
+        const hours = String(Math.floor(duration.asHours())).padStart(2, '0');
+        const minutes = String(duration.minutes()).padStart(2, '0');
+        const seconds = String(duration.seconds()).padStart(2, '0');
+
+        return `${hours}:${minutes}:${seconds}`
+    }
+
+    useEffect(() => {
+        if (nextToOrder !== null) {
+            nextToOderIntervalId = setInterval(() => {
+                if (nextToOrder) {
+                    set_nto_time(getTimeString(nextToOrder))
+                }
+          }, 1000);
+        }
+
+        return () => {
+          if (nextToOderIntervalId) {
+            set_nto_time('00:00:00')
+            clearInterval(nextToOderIntervalId);
+          }
+        };
+      }, [nextToOrder]);
+
+      useEffect(() => {
+        if (currentlyOrdering !== null) {
+            co_interval_id = setInterval(() => {
+                if (currentlyOrdering) {
+                    set_co_time(getTimeString(currentlyOrdering))
+                }
+          }, 1000);
+        }
+
+        return () => {
+          if (co_interval_id) {
+            set_co_time((prev_co_time) => {
+                console.log('currentlyOrdering', currentlyOrdering)
+                if (currentlyOrdering) {
+                    let converted_co_time = convertToHoursMinutesSeconds(prev_co_time);
+
+                    if (co_maximum !== '0s' && co_average === '0s') {
+                        set_co_average(averageTime(co_maximum, converted_co_time))
+                    } else if (co_average !== '0s') {
+                        set_co_average((prev_value) => averageTime(prev_value, converted_co_time))
+                    }
+
+                    set_co_minimum(min_prev_value => {
+                        if ((min_prev_value === '0s' && co_maximum !== '0s') || compareTimes(min_prev_value, converted_co_time)) {
+                            return converted_co_time
+                        } else {
+                            return min_prev_value
+                        }
+                    })
+
+                    set_co_maximum((max_prev_value) => {
+                        if (max_prev_value === '0s' || compareTimes(converted_co_time, max_prev_value)) {
+                            return converted_co_time
+                        } else {
+                            return max_prev_value
+                        }
+                    });
+
+                    // setTimeout(() => {
+                    //     if (co_maximum !== '0s' && co_minimum !== '0s') {
+                    //         set_co_average((prev_value) => averageTime(prev_value, converted_co_time))
+                    //     }
+                    // }, 150)
+                    
+                }         
+                return '00:00:00'
+            })
+            clearInterval(co_interval_id);
+          }
+        };
+      }, [currentlyOrdering]);
+
+      useEffect(() => {
+        if (nextServing !== null) {
+            ns_interval_id = setInterval(() => {
+                if (nextServing) {
+                    set_ns_time(getTimeString(nextServing))
+                }
+          }, 1000);
+        }
+
+        return () => {
+          if (ns_interval_id) {
+            set_ns_time('00:00:00')
+            clearInterval(ns_interval_id);
+          }
+        };
+      }, [nextServing]);
+
+      useEffect(() => {
+        if (currentlyServing !== null) {
+            cs_interval_id = setInterval(() => {
+                if (currentlyServing) {
+                    set_cs_time(getTimeString(currentlyServing))
+                }
+          }, 1000);
+        }
+
+        return () => {
+          if (cs_interval_id) {
+            set_cs_time('00:00:00')
+            clearInterval(cs_interval_id);
+          }
+        };
+      }, [currentlyServing]);
 
     return (
         <div className={`flex justify-center aspect-w-16 aspect-h-9 items-center w-full bg-black relative ${themeProvider.main_bg}`}>
@@ -57,20 +209,20 @@ function Root() {
                             <div className='w-[70%]'>
                                 <div className='flex flex-col items-center'>
                                     <div className='text-2xl mt-5'>CURRENTLY SERVING</div>
-                                    <div className='text-4xl mt-3' style={{ color: '#F3B64B' }}>00:01:23</div>
+                                    <div className='text-4xl mt-3' style={{ color: '#F3B64B' }}>{cs_time}</div>
                                     <div className='mt-3'><img src={pickupPoint} style={{ width: 185 }} /></div>
                                     <div className='flex justify-center space-x-4 mt-2 w-[80%]'>
                                         <div className='text-sm w-[25%]' style={{ color: '#838B9B' }}>
                                             Minimum
-                                            <div className='rounded scoreboard-green text-white py-1.5 text-center'>10s</div>
+                                            <div className='rounded scoreboard-green text-white py-1.5 text-center'>{cs_minimum}</div>
                                         </div>
                                         <div className='text-sm w-[25%]' style={{ color: '#838B9B' }}>
                                             Average
-                                            <div className='rounded text-white py-1.5 text-center' style={{ backgroundColor: '#F3B64B' }}>1m 10s</div>
+                                            <div className='rounded text-white py-1.5 text-center' style={{ backgroundColor: '#F3B64B' }}>{cs_average}</div>
                                         </div>
                                         <div className='text-sm w-[25%]' style={{ color: '#838B9B' }}>
                                             Maximum
-                                            <div className='rounded text-white py-1.5 text-center' style={{ backgroundColor: '#D21716' }}>5m 10s</div>
+                                            <div className='rounded text-white py-1.5 text-center' style={{ backgroundColor: '#D21716' }}>{cs_maximum}</div>
                                         </div>
                                     </div>
                                 </div>
@@ -84,7 +236,7 @@ function Root() {
                                             NEXT SERVING
                                         </div>
                                         <div className='text-4xl mt-7'>
-                                            00:00:06
+                                            {ns_time}
                                         </div>
                                         <div className='mt-8'>
                                             <img src={sedanIcon} style={{ width: 180 }} />
@@ -129,20 +281,20 @@ function Root() {
                         <div className='rounded h-[65%] shadowed'>
                             <div className='h-[91%] flex flex-col items-center'>
                                 <div className='text-2xl mt-5'>CURRENTLY ORDERING</div>
-                                <div className='text-4xl mt-3' style={{ color: '#F3B64B' }}>00:01:23</div>
+                                <div className='text-4xl mt-3' style={{ color: '#F3B64B' }}>{co_time}</div>
                                 <div className='mt-3'><img src={orderPoint} style={{ width: 185 }} /></div>
                                 <div className='flex justify-center space-x-4 mt-2 w-[80%]'>
                                     <div className='text-sm w-[25%]' style={{ color: '#838B9B' }}>
                                         Minimum
-                                        <div className='rounded scoreboard-green text-white py-1.5 text-center'>10s</div>
+                                        <div className='rounded scoreboard-green text-white py-1.5 text-center'>{co_minimum}</div>
                                     </div>
                                     <div className='text-sm w-[25%]' style={{ color: '#838B9B' }}>
                                         Average
-                                        <div className='rounded text-white py-1.5 text-center' style={{ backgroundColor: '#F3B64B' }}>1m 10s</div>
+                                        <div className='rounded text-white py-1.5 text-center' style={{ backgroundColor: '#F3B64B' }}>{co_average}</div>
                                     </div>
                                     <div className='text-sm w-[25%]' style={{ color: '#838B9B' }}>
                                         Maximum
-                                        <div className='rounded text-white py-1.5 text-center' style={{ backgroundColor: '#D21716' }}>5m 10s</div>
+                                        <div className='rounded text-white py-1.5 text-center' style={{ backgroundColor: '#D21716' }}>{co_maximum}</div>
                                     </div>
                                 </div>
                             </div>
@@ -172,7 +324,7 @@ function Root() {
                                         NEXT TO ORDER
                                     </div>
                                     <div className='text-4xl mt-7'>
-                                        00:00:06
+                                        {nto_time}
                                     </div>
                                     <div className='mt-8'>
                                         <img src={sedanIcon} style={{ width: 180 }} />

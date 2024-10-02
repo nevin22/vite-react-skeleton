@@ -13,9 +13,12 @@ interface CarPathProps {
 interface Car {
     position: string;
     index: number;
+    order: number; // order in each fov
+    order_adjusted: boolean;
     dwell_time?: string;
     in_time?: number;
-    out_time?: number;
+    out_time?: number | null;
+    scid: string;
     status: string;
 }
 
@@ -43,59 +46,139 @@ function CarPath({ getCarsInLane }: CarPathProps) {
     
     const [carQueue, setCarQueue] = useState<Car[]>([]);
 
-    const updateCar = (detection: detection) => {}
+    useEffect(() => {
+        getCarsInLane(carQueue); // used to update score board counts
+    }, [carQueue])
 
-    const addCar = (detection: detection) => {
-        const position = 'Pre-Order Point';
-        const index = carQueue.filter(c => c.position === position).length;
-        setCarQueue([...carQueue, {
-            position,
-            index: index + 1,
-            in_time: detection.timestamp,
-            status: 'in'
-        }])
+    const setCarOut = (detection: detection) => {
+        setCarQueue((prevCarQueue: Car[]) => {
+            let carQueueCopy = [...prevCarQueue];
+            let toUpdate = carQueueCopy.findIndex(c => c.scid === detection.scid);
 
-        getCarsInLane([...carQueue, { // for main board updates
-            position,
-            index: index + 1,
-            in_time: detection.timestamp,
-            status: 'in'
-        }]);
+            carQueueCopy[toUpdate] = {
+                ...carQueueCopy[toUpdate],
+                status: 'out',
+                out_time: detection.timestamp
+            }
+            return carQueueCopy
+        })
     }
 
-    const addOrderPoint = () => {
-        const position = 'Order Point';
-        const carQeueueCopy = [...carQueue];
-        const carIndex = carQeueueCopy.findIndex(car => car.position === 'Pre-Order Point');
-        if (carIndex !== -1) {
-            carQeueueCopy[carIndex].position = position;
-            setCarQueue(carQeueueCopy)
-            getCarsInLane(carQeueueCopy);
+    const updateCarList = (detection: detection) => {
+        console.log('detection', detection)
+        if (detection.sf_order === 1) { // PRE ORDER
+            if (detection.status.toLowerCase() === 'in') {
+                const position = 'Pre-Order Point';
+                setCarQueue((prevCarQueue: Car[]) => {
+                    let carQueueCopy = [...prevCarQueue];
+                    let fov_order = prevCarQueue.filter(c => c.position === position).length;
+                    let index = prevCarQueue.length;
+                    carQueueCopy.push({
+                        position,
+                        index: index + 1,
+                        order: fov_order + 1,
+                        status: 'in',
+                        scid: detection.scid,
+                        in_time: detection.timestamp,
+                        out_time: null,
+                        order_adjusted: false
+                    })
+                    return carQueueCopy
+                })
+            } else if (detection.status.toLowerCase() === 'out') {
+                setCarOut(detection)
+            }
+        } else if (detection.sf_order === 2) { // ORDER POINT
+            if (detection.status.toLowerCase() === 'in') {
+                const position = 'Order Point';
+                setCarQueue((prevCarQueue: Car[]) => {
+                    let carQueueCopy = [...prevCarQueue];
+                    let toUpdate = carQueueCopy.findIndex((car: Car) => car.position === 'Pre-Order Point' && car.status === 'out');
+                    let fov_order = prevCarQueue.filter(c => c.position === position).length;
+                    
+                    carQueueCopy[toUpdate] = {
+                        ...carQueueCopy[toUpdate],
+                        status: 'in',
+                        position: position,
+                        in_time: detection.timestamp,
+                        scid: detection.scid,
+                        order: fov_order + 1
+                    }
+
+                    // adjust order so car will move to front
+                    carQueueCopy.forEach((car) => {
+                        if (car.position === 'Pre-Order Point')
+                        car.order = car.order - 1;
+                        car.order_adjusted = true;
+                    })
+
+                    return carQueueCopy
+                })
+            } else if (detection.status.toLowerCase() === 'out') {
+                setCarOut(detection)
+            }
+        } else if (detection.sf_order === 3) { // SERVICE QUEUE
+            if (detection.status.toLowerCase() === 'in') {
+                const position = 'Service Queue Lane';
+                setCarQueue((prevCarQueue: Car[]) => {
+                    let fov_order = prevCarQueue.filter(c => c.position === position).length;
+                    let carQueueCopy = [...prevCarQueue];
+                    let toUpdate = carQueueCopy.findIndex((car: Car) => car.position === 'Order Point' && car.status === 'out');
+
+                    carQueueCopy[toUpdate] = {
+                        ...carQueueCopy[toUpdate],
+                        status: 'in',
+                        position: position,
+                        in_time: detection.timestamp,
+                        scid: detection.scid,
+                        order: fov_order + 1,
+                        order_adjusted: false
+                    }
+
+                    return carQueueCopy
+                })
+            } else if (detection.status.toLowerCase() === 'out') {
+                setCarOut(detection)
+            }
+        } else if (detection.sf_order === 4) {
+            if (detection.status.toLowerCase() === 'in') {
+                const position = 'Pull Up Window';
+                setCarQueue((prevCarQueue: Car[]) => {
+                    let fov_order = prevCarQueue.filter(c => c.position === position).length;
+                    let carQueueCopy = [...prevCarQueue];
+                    let toUpdate = carQueueCopy.findIndex((car: Car) => car.position === 'Service Queue Lane' && car.status === 'out');
+
+                    carQueueCopy[toUpdate] = {
+                        ...carQueueCopy[toUpdate],
+                        status: 'in',
+                        position: position,
+                        in_time: detection.timestamp,
+                        scid: detection.scid,
+                        order: fov_order + 1
+                    }
+
+                    
+                    // adjust order so car will move to front
+                    carQueueCopy.forEach((car) => {
+                        if (car.position === 'Service Queue Lane')
+                        car.order = car.order - 1;
+                        car.order_adjusted = true;
+                    })
+
+                    return carQueueCopy
+                })
+            } else if (detection.status.toLowerCase() === 'out') {
+                setCarOut(detection)
+            }
         }
     }
 
-    const addServiceQueueLane = () => {
-        const position = 'Service Queue Lane';
-        const index = carQueue.filter(c => c.position === position).length;
-        const carQeueueCopy = [...carQueue];
-        const carIndex = carQeueueCopy.findIndex(car => car.position === 'Order Point');
-        if (carIndex !== -1) {
-            carQeueueCopy[carIndex].position = position;
-            carQeueueCopy[carIndex].index = index + 1;
-            setCarQueue(carQeueueCopy)
-            getCarsInLane(carQeueueCopy);
-        }
-    }
-
-    const addPullUpWindow = () => {
-        const position = 'Pull Up Window';
-        const carQeueueCopy = [...carQueue];
-        const carIndex = carQeueueCopy.findIndex(car => car.position === 'Service Queue Lane');
-        if (carIndex !== -1) {
-            carQeueueCopy[carIndex].position = position;
-            setCarQueue(carQeueueCopy)
-            getCarsInLane(carQeueueCopy);
-        }
+    const remove_from_queue = (index: number) => {
+        setCarQueue((prevCarQueue: Car[]) => {
+            let carQueueCopy = [...prevCarQueue];
+            carQueueCopy.splice(index - 1, 1)
+            return carQueueCopy
+        })
     }
 
     // MQTT SETUP
@@ -105,7 +188,7 @@ function CarPath({ getCarsInLane }: CarPathProps) {
     const cleanup = () => {
         let client = getMqttClient();
         if (client) {
-            client.unsubscribe(topic, error => {
+            client.unsubscribe(topic, (error: any) => {
                 if (error) {
                     console.log('Unsubscribe error', error)
                     return
@@ -147,10 +230,7 @@ function CarPath({ getCarsInLane }: CarPathProps) {
 
             client.on('message', (topic, message) => {
                 const detection = JSON.parse(message.toString())
-                console.log('detection - ', detection)
-                if (detection.sf_order === 1) {
-                    addCar(detection)
-                }
+                updateCarList(detection)
             });
         }
     }, [client]);
@@ -161,11 +241,15 @@ function CarPath({ getCarsInLane }: CarPathProps) {
             <img src={carPath} style={{ height: '100%', width: '100%', position: 'absolute' }} />
             { carQueue.map((c, i) => {
                 return <Car
-                    key={i}
+                    key={c.index}
                     windowWidth={windowWidth}
                     windowHeight={windowHeight}
                     position={c.position}
+                    order={c.order}
+                    order_adjusted={c.order_adjusted}
                     index={c.index}
+                    status={c.status}
+                    remove_from_queue={(index: number) => remove_from_queue(index)}
                 />
             })
             }
