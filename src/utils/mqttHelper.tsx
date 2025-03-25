@@ -5,9 +5,9 @@ let mqtt_client: MqttClient | null = null;
 
 export const initializeMqttClient = (cb: () => void): void => {
     const clientId: string = 'nevin_mqttjs_' + Math.random().toString(16).substr(2, 8);
-    const host: string = 'wss://dev.broker.internal.viana.ai:8084/mqtt';
+    const host: string = import.meta.env.VITE_MQTT_HOST;
 
-    const username: string = import.meta.env.VITE_MQTT_USERNAME;   
+    const username: string = import.meta.env.VITE_MQTT_USERNAME;
     const password: string = import.meta.env.VITE_MQTT_PASSWORD;
 
     const mqttOption: IClientOptions = {

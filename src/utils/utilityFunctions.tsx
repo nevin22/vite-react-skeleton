@@ -50,3 +50,20 @@ export const averageTime = (time1: string, time2: string): string => {
     const averageSeconds = Math.floor((time1Seconds + time2Seconds) / 2);
     return secondsToTimeString(averageSeconds);
 }
+
+
+export const avg_dwell_time_converter = (time: number) => {
+    if (time === 0) return "0"; // Handle zero case
+
+    const h = Math.floor(time / 3600);
+    const m = Math.floor((time % 3600) / 60);
+    const s = time % 60; 
+    const sFormatted = s === 0 ? "0" : s.toFixed(2); // Avoid "0.00"
+
+    let result = [];
+    if (h > 0) result.push(`${h}h`);
+    if (m > 0) result.push(`${m}m`);
+    if (s > 0 || result.length === 0) result.push(`${sFormatted}s`);
+
+    return result.join(" ");
+}

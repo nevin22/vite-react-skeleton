@@ -13,7 +13,7 @@ import sadIcon from '../assets/face-sad.svg';
 import neutralIcon from '../assets/face-neutral.svg';
 
 import themeProvider from '../utils/themeProvider';
-import {convertToHoursMinutesSeconds, compareTimes, averageTime} from '../utils/utilityFunctions';
+import {convertToHoursMinutesSeconds, compareTimes, averageTime, avg_dwell_time_converter} from '../utils/utilityFunctions';
 
 interface Car {
     position: string;
@@ -23,8 +23,16 @@ interface Car {
     out_time: number;
 }
 
+interface metrics {
+    average_dwell_ent: number;
+    average_dwell_op: number;
+    average_dwell_queue: number;
+    average_dwell_puw: number;
+}
+
 function Root() {
     const [time, setTime] = useState(moment().format('hh:mm:ss A'));
+    const [metrics, setMetrics] = useState<metrics | null>(null)
     const [carsInLane, setCarsInLane] = useState<Car[]>([]);
     const [popCount, setPopCount] = useState<number>(0);
     const [sqlCount, setSqlCount] = useState<number>(0);
@@ -70,7 +78,6 @@ function Root() {
         setNextToOrder(carsInLane.filter(car => car.position === 'Pre-Order Point')[0]?.in_time)
 
         if (carsInLane.filter(car => car.position === 'Order Point')[0]?.in_time !== currentlyOrdering) {
-            console.log('TRIGGERD')
             setCurrentlyOrdering(carsInLane.filter(car => car.position === 'Order Point')[0]?.in_time)
         }
 
@@ -80,7 +87,8 @@ function Root() {
     
     const getTimeString = (timestamp: number) => {
         const now = moment();
-        const duration = moment.duration(now.diff(timestamp));
+        const ts = moment(Number(timestamp))
+        const duration = moment.duration(now.diff(ts));
         
         const hours = String(Math.floor(duration.asHours())).padStart(2, '0');
         const minutes = String(duration.minutes()).padStart(2, '0');
@@ -118,7 +126,7 @@ function Root() {
         return () => {
           if (co_interval_id) {
             set_co_time((prev_co_time) => {
-                console.log('currentlyOrdering', currentlyOrdering)
+                // console.log('currentlyOrdering', currentlyOrdering)
                 if (currentlyOrdering) {
                     let converted_co_time = convertToHoursMinutesSeconds(prev_co_time);
 
@@ -196,6 +204,7 @@ function Root() {
         <div className={`flex justify-center aspect-w-16 aspect-h-9 items-center w-full bg-black relative ${themeProvider.main_bg}`}>
             <CarPath
                 getCarsInLane={(c) => getCarsInLane(c)}
+                getMetrics={(metrics) => setMetrics(metrics)}
             />
             <div className='flex flex-col items-center h-full w-full pt-10'>
                 <div className='flex flex-row w-[95%] h-[75%] space-x-2'>
@@ -266,10 +275,10 @@ function Root() {
                     </div>
                     <div className='flex w-[27%] flex-col space-y-2'>
                         <div className={`rounded h-[13.7%] text-white ${themeProvider.date} text-2xl centerize`}>
-                            {moment(new Date()).format('DD MMMM YYYY').toUpperCase()}
+                            {moment().format('DD MMMM YYYY').toUpperCase()}
                         </div>
                         <div className='bg-white rounded h-[21.3%] text-2xl centerize flex'>
-                            <div className='flex-1 centerize'>
+                            <div className='flex-1 centerize' style={{ zIndex: 100000 }} onClick={() => console.log(carsInLane)}>
                                 CARS IN LANE
                             </div>
                             <div className='flex-1 h-full centerize'>
@@ -304,7 +313,7 @@ function Root() {
                         </div>
                     </div>
                     <div className='flex w-[27%] flex-col space-y-2'>
-                        <div className={`text-white rounded h-[13.7%] ${themeProvider.time} text-2xl centerize`}>
+                        <div className={`text-white rounded h-[13.8%] ${themeProvider.time} text-2xl centerize`}>
                             {time}
                         </div>
                         <div className={`text-white rounded h-[28.75%] ${themeProvider.total} text-2xl flex justify-center pt-5`}>
@@ -313,11 +322,11 @@ function Root() {
                                     TOTAL SERVED
                                 </div>
                                 <div className='text-5xl pt-8'>
-                                    2
+                                    0
                                 </div>
                             </div>
                         </div>
-                        <div className='rounded h-[55%] shadowed'>
+                        <div className='rounded h-[58%] shadowed'>
                             <div className='h-[90%] flex'>
                                 <div className='flex flex-col flex-1 items-center'>
                                     <div className='text-lg mt-5'>
@@ -405,22 +414,22 @@ function Root() {
                                 <span className='ml-7 mb-2 font-semibold'>AVG DWELL TIME PER ZONE</span>
                                 <div className='flex justify-between mx-7 mt-4'>
                                     <div>
-                                        <span className='text-xl'>32.3s</span>
+                                        <span className='text-xl'>{avg_dwell_time_converter(metrics?.average_dwell_ent ?? 0)}</span>
                                         <br />
                                         <span className='text-sm font-medium'>Pre-order Point</span>
                                     </div>
                                     <div>
-                                        <span className='text-xl'>1m 45s</span>
+                                        <span className='text-xl'>{avg_dwell_time_converter(metrics?.average_dwell_op ?? 0)}</span>
                                         <br />
                                         <span className='text-sm font-medium'>Order Point</span>
                                     </div>
                                     <div>
-                                        <span className='text-xl'>3m 28s</span>
+                                        <span className='text-xl'>{avg_dwell_time_converter(metrics?.average_dwell_queue ?? 0)}</span>
                                         <br />
                                         <span className='text-sm font-medium'>Service Queue</span>
                                     </div>
                                     <div>
-                                        <span className='text-xl'>1m 16s</span>
+                                        <span className='text-xl'>{avg_dwell_time_converter(metrics?.average_dwell_puw ?? 0)}</span>
                                         <br />
                                         <span className='text-sm font-medium'>Pullup Window</span>
                                     </div>
